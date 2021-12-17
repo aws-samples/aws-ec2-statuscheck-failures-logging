@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: A template to log EC2StatusHealth Events to centralized logging solution
+Parameters:
+  AWSOrgID:
+    Type: String
+    Description: >-
+      Field is optional. Please provide ORGID if you want to enable logging for
+      all accounts under Org
+    MinLength: '12'
+    MaxLength: '24'
+    Default: NotAvailable
+    ConstraintDescription: Please specify your 12 characters OrgID or Type NotAvailable in AWSOrgID field 
+  SubnetIDs:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet IDs in VPC for you lambda to access your loggign solution. e.g  subnet-071f712345678e7c8, subnet-071f712345678e7c9
+    MinLength: '1'
+    MaxLength: '1024'
+  SGIDs:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group that lambda can use to access your loggign solution. sg-085912345678492fb
+    MinLength: '1'
+    MaxLength: '1024'
+  ElasticSearchServer:
+    Type: String
+    Description: IP or hostname of your graylog or EKS server
+    MinLength: '1'
+    MaxLength: '1024'
+    Default: 'xxxxxxx.us-west-2.es.amazonaws.com'
+  ElasticSearchLoggingPort:
+    Type: Number
+    Description: Port of your ES server
+    Default: 443
+  ElasticSearchUser:
+    Type: String
+    Description: User of your ES server
+    MinLength: '1'
+    MaxLength: '63'
+    Default: "esadmin"
+  ElasticSearchPassword:
+    Type: String
+    Description: Passworf of your ES User
+    MinLength: '1'
+    MaxLength: '63'
+    Default: "x"
+  S3BucketName:
+    NoEcho: 'false'
+    Type: String
+    Description: Name of S3 bucket where lambda code is
+    MinLength: '1'
+    MaxLength: '63'
+    ConstraintDescription: Please keep bucket name under 41 characters.
+    Default: 'x-us-west2-s3'
+  S3Key:
+    NoEcho: 'false'
+    Type: String
+    Description: Full path under s3 for zip file. e.g. escode.zip or folder1/folder2/escode.zip
+    MinLength: '1'
+    MaxLength: '1024'
+    Default: 'escode.zip'
+Conditions: 
+  CreateSNSTopicPolicy: !Not [ !Equals [ !Ref AWSOrgID, NotAvailable ]]
+  DefaultSNSTopicPolicy:  !Equals [ !Ref AWSOrgID, NotAvailable ]
+
+Resources:
+  Lambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: !Join ["/", [!Ref S3Key]]
+      Runtime: python3.8
+      Timeout: 300
+      Environment:
+        Variables:
+          SOURCE: ec2_systemcheck
+          SERVER: !Ref ElasticSearchServer
+          PORT: !Ref ElasticSearchLoggingPort
+          ESUSER: !Ref ElasticSearchUser
+          ESPASSWORD: !Ref ElasticSearchPassword
+      VpcConfig:
+        SecurityGroupIds: !Ref SGIDs
+        SubnetIds: !Ref SubnetIDs
+          
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: LoggingLambdaExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DeleteNetworkInterface'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'sns:subscribe'
+                Resource: "*"
+      Description: Lambda Execution Role for Lambda
+      MaxSessionDuration: 3600
+  Permission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt 
+        - Lambda
+        - Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: sns.amazonaws.com
+  SNSTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt 
+            - Lambda
+            - Arn
+          Protocol: lambda
+  SNSTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Condition: CreateSNSTopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2008-10-17
+        Id: !Ref SNSTopic
+        Statement:
+          - Sid: __default_statement_ID
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:Publish'
+              - 'SNS:RemovePermission'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:DeleteTopic'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:Receive'
+              - 'SNS:AddPermission'
+              - 'SNS:Subscribe'
+            Resource: !Ref SNSTopic
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner': !Ref 'AWS::AccountId'
+          - Sid: __console_pub_0
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'SNS:Publish'
+            Resource: !Ref SNSTopic
+            Condition:
+              StringEquals:
+                'aws:PrincipalOrgID': !Ref AWSOrgID
+      Topics:
+        - !Ref SNSTopic
+  
+  SNSTopicDefaultPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Condition: DefaultSNSTopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2008-10-17
+        Id: !Ref SNSTopic
+        Statement:
+          - Sid: __default_statement_ID
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:Publish'
+              - 'SNS:RemovePermission'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:DeleteTopic'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:Receive'
+              - 'SNS:AddPermission'
+              - 'SNS:Subscribe'
+            Resource: !Ref SNSTopic
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner': !Ref 'AWS::AccountId'
+      Topics:
+        - !Ref SNSTopic
+Outputs:
+  SNSTopicARN:
+    Value: !Ref SNSTopic
+    Description: Topic ARN of newly created SNS topic
+  LambdaExecutionRole:
+    Value: !Ref LambdaExecutionRole
+    Description: Lambda Role
+  Lambda:
+    Value: !Ref Lambda
+    Description: Lambda Function
