@@ -1,7 +1,4 @@
-# My Project
-
-
-## Logging System Check failure events to Centralized Logging System. 
+# Logging System Check failure events to Centralized Logging System.
 
 ** Describe Solutions here **
 
