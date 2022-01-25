@@ -13,50 +13,49 @@ Parameters:
   SubnetIDs:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Subnet IDs in VPC for you lambda to access your loggign solution. e.g  subnet-071f712345678e7c8, subnet-071f712345678e7c9
-    MinLength: '1'
-    MaxLength: '1024'
+    Default: ""
   SGIDs:
     Type: List<AWS::EC2::SecurityGroup::Id>
     Description: Security group that lambda can use to access your loggign solution. sg-085912345678492fb
-    MinLength: '1'
-    MaxLength: '1024'
-  ElasticSearchServer:
+    Default: ""
+  OpenSearchServiceServer:
     Type: String
-    Description: IP or hostname of your graylog or EKS server
-    MinLength: '1'
-    MaxLength: '1024'
-    Default: 'xxxxxxx.us-west-2.es.amazonaws.com'
-  ElasticSearchLoggingPort:
+    Description: IP or hostname of your OpenSearchService server
+    Default: ""
+  OpenSearchServiceLoggingPort:
     Type: Number
-    Description: Port of your ES server
+    Description: Port of your OpenSearchService server
     Default: 443
-  ElasticSearchUser:
+  OpenSearchServiceUser:
+    NoEcho: 'false'
     Type: String
-    Description: User of your ES server
     MinLength: '1'
-    MaxLength: '63'
+    MaxLength: '16'
+    Description: Username of your OpenSearchService server
     Default: "esadmin"
-  ElasticSearchPassword:
+  OpenSearchServicePassword:
+    NoEcho: 'true'
     Type: String
-    Description: Passworf of your ES User
-    MinLength: '1'
-    MaxLength: '63'
-    Default: "x"
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: Password of your OpenSearchService User
   S3BucketName:
     NoEcho: 'false'
     Type: String
     Description: Name of S3 bucket where lambda code is
-    MinLength: '1'
+    MinLength: '0'
     MaxLength: '63'
     ConstraintDescription: Please keep bucket name under 41 characters.
-    Default: 'x-us-west2-s3'
+    Default: ''
   S3Key:
     NoEcho: 'false'
     Type: String
-    Description: Full path under s3 for zip file. e.g. escode.zip or folder1/folder2/escode.zip
+    Description: Folder on S3 where lambda code is. e.g Code
     MinLength: '1'
     MaxLength: '1024'
-    Default: 'escode.zip'
+    Default: 'Code'
 Conditions: 
   CreateSNSTopicPolicy: !Not [ !Equals [ !Ref AWSOrgID, NotAvailable ]]
   DefaultSNSTopicPolicy:  !Equals [ !Ref AWSOrgID, NotAvailable ]
@@ -71,16 +70,16 @@ Resources:
         - Arn
       Code:
         S3Bucket: !Ref S3BucketName
-        S3Key: !Join ["/", [!Ref S3Key]]
+        S3Key: !Join ["/", [!Ref S3Key,'escode.zip']]
       Runtime: python3.8
       Timeout: 300
       Environment:
         Variables:
           SOURCE: ec2_systemcheck
-          SERVER: !Ref ElasticSearchServer
-          PORT: !Ref ElasticSearchLoggingPort
-          ESUSER: !Ref ElasticSearchUser
-          ESPASSWORD: !Ref ElasticSearchPassword
+          SERVER: !Ref OpenSearchServiceServer
+          PORT: !Ref OpenSearchServiceLoggingPort
+          ESUSER: !Ref OpenSearchServiceUser
+          ESPASSWORD: !Ref OpenSearchServicePassword
       VpcConfig:
         SecurityGroupIds: !Ref SGIDs
         SubnetIds: !Ref SubnetIDs
