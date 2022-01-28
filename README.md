@@ -15,14 +15,14 @@ In this artifact, you will get lambda code along with CF template, that will col
 ** 3) Enter the parameter  **
 
 * a. AWSOrgID if you want to deploy this solution for all accounts under AWS Org
-* b. Elastic Search Server
-* c. Elastic Search Server port
-* d. Elastic Search User
-* e. Elastic Search Password
+* b. Open Search/ Elastic Search Server
+* c. Open Search/ Elastic Search Server port
+* d. Open Search/ Elastic Search User
+* e. Open Search/ Elastic Search Password
 * f. S3 Bucket name (Location of lambda code. Ref to pre-requisite)
 * g. S3 Key (Folder under S3 where code is uploaded)
 * h. Security Group (Drop down list to select existing SG that will give Lambda access to Elastic Search Server. Default port for ES server is 443)
-* i. Subnet where Lambda would be deployed to get access to Elastic Search Server
+* i. Subnet where Lambda would be deployed to get access to Open Search/ Elastic SearchElastic Search Server
 
 ** 4) Deploy the stack and check resources been created as part of stack.  Please note down SNS topic that is created. **
 
